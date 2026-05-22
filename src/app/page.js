@@ -223,16 +223,16 @@ export default function Home() {
         flash("PIN set! You're logged in.");
         localStorage.setItem("fives_player_id", String(selectedId));
         localStorage.setItem("fives_logged_in", "true");
+        localStorage.setItem("fives_pin_cache", pinInput);
         setLoggedIn(true);
         const data = await fetchState();
         if (data) setState(data);
+        setPinInput("");
         setScreen("main");
       }
     } else {
-      // Verify PIN by attempting a dummy confirm then check
-      // Simpler: just try to confirm and see if PIN is valid
-      // Actually, let's verify by calling confirm — if they're already in it's a no-op upsert
-      const res = await fetch("/api/confirm", {
+      // Verify PIN only — don't change any status
+      const res = await fetch("/api/verify-pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playerId: selectedId, pin: pinInput }),
@@ -243,11 +243,15 @@ export default function Home() {
         flash("Wrong PIN", "error");
         return;
       }
+      if (!res.ok) {
+        flash(data.error || "Login failed", "error");
+        return;
+      }
 
-      // PIN is valid — log them in (and they're also confirmed as IN)
-      flash(`${selectedPlayer.emoji} ${selectedPlayer.name} — logged in & confirmed IN!`);
+      flash(`${selectedPlayer.emoji} ${selectedPlayer.name} — logged in!`);
       localStorage.setItem("fives_player_id", String(selectedId));
       localStorage.setItem("fives_logged_in", "true");
+      localStorage.setItem("fives_pin_cache", pinInput);
       setLoggedIn(true);
       const freshState = await fetchState();
       if (freshState) setState(freshState);
@@ -428,10 +432,7 @@ export default function Home() {
 
             <button
               disabled={busy || pinInput.length < 4}
-              onClick={() => {
-                localStorage.setItem("fives_pin_cache", pinInput);
-                handleLogin();
-              }}
+              onClick={handleLogin}
               className="w-full bg-green-500 text-green-950 py-4 rounded-2xl font-extrabold text-lg tracking-wide disabled:opacity-40 transition-all">
               {busy ? "..." : isNewUser ? "SET PIN & LOG IN" : "LOG IN"}
             </button>
@@ -556,20 +557,40 @@ export default function Home() {
             {me && (
               <div className="bg-gradient-to-br from-[#14291e] to-[#1a3328] border border-green-500/20 rounded-2xl p-4 mb-4">
                 {me.section === "waiting" && (
-                  <button onClick={handleConfirm}
-                    className="w-full bg-green-500 text-green-950 py-4 rounded-xl font-extrabold text-lg tracking-wide active:scale-[0.98] transition">
-                    I'M IN ⚽
-                  </button>
+                  <div>
+                    <div className="text-center text-slate-400 text-sm mb-3">Are you playing this week?</div>
+                    <div className="flex gap-3">
+                      <button onClick={handleConfirm}
+                        className="flex-1 bg-green-500 text-green-950 py-4 rounded-xl font-extrabold text-base tracking-wide active:scale-[0.98] transition">
+                        I'M IN ⚽
+                      </button>
+                      <button onClick={handleDropout}
+                        className="flex-1 bg-red-500 text-white py-4 rounded-xl font-extrabold text-base tracking-wide active:scale-[0.98] transition">
+                        I'M OUT
+                      </button>
+                    </div>
+                  </div>
                 )}
                 {(me.section === "playing" || me.section === "standby") && (
-                  <button onClick={handleDropout}
-                    className="w-full bg-red-500 text-white py-4 rounded-xl font-extrabold text-lg tracking-wide active:scale-[0.98] transition">
-                    DROP OUT
-                  </button>
+                  <div>
+                    <div className="text-center text-green-400 text-sm font-bold mb-3">
+                      You're {me.section === "playing" ? "PLAYING" : "on STANDBY"} ✓
+                    </div>
+                    <button onClick={handleDropout}
+                      className="w-full bg-red-500/20 text-red-400 border border-red-500/30 py-3 rounded-xl font-extrabold text-sm tracking-wide active:scale-[0.98] transition">
+                      Change to OUT
+                    </button>
+                  </div>
                 )}
                 {me.section === "dropped" && (
-                  <div className="text-center text-red-400 font-bold py-3">
-                    You dropped out this week — back in the queue next week
+                  <div>
+                    <div className="text-center text-red-400 text-sm font-bold mb-3">
+                      You're marked OUT this week
+                    </div>
+                    <button onClick={handleConfirm}
+                      className="w-full bg-green-500/20 text-green-400 border border-green-500/30 py-3 rounded-xl font-extrabold text-sm tracking-wide active:scale-[0.98] transition">
+                      Change to IN
+                    </button>
                   </div>
                 )}
               </div>
