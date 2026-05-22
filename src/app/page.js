@@ -162,6 +162,13 @@ export default function Home() {
     if (res?.ok) { fetchState(); }
   };
 
+  const handleResetPin = async (playerId, name) => {
+    if (!/^\d{4}$/.test(adminPin)) { flash("Enter admin PIN first", "error"); return; }
+    if (!confirm(`Reset PIN for ${name}? They will need to set a new one.`)) return;
+    const res = await api("/api/admin/reset-pin", { adminPin, playerId });
+    if (res?.ok) { flash(res.message); fetchState(); }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -407,6 +414,24 @@ export default function Home() {
                         <button key={p.id} onClick={() => handleRemovePlayer(p.id, p.name)}
                           className="bg-slate-800 text-red-400 px-2 py-1 rounded text-xs font-semibold hover:bg-red-500/20">
                           ✕ {p.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-bold text-slate-500 mb-2">🔐 Reset player PIN</div>
+                    <div className="text-xs text-slate-600 mb-2">Player will need to set a new PIN on their next visit.</div>
+                    <div className="flex flex-wrap gap-1">
+                      {state.players.map((p) => (
+                        <button key={p.id} onClick={() => handleResetPin(p.id, p.name)}
+                          className={`px-2 py-1 rounded text-xs font-semibold ${
+                            p.hasPin
+                              ? "bg-slate-800 text-amber-400 hover:bg-amber-500/20"
+                              : "bg-slate-800/50 text-slate-600 cursor-not-allowed"
+                          }`}
+                          disabled={!p.hasPin}>
+                          🔑 {p.name} {p.hasPin ? "" : "(no PIN)"}
                         </button>
                       ))}
                     </div>
