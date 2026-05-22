@@ -125,14 +125,71 @@ export default function Home() {
 
   const handleConfirm = async () => {
     if (!/^\d{4}$/.test(pinInput)) { flash("Enter your 4-digit PIN", "error"); return; }
-    const res = await api("/api/confirm", { playerId: selectedId, pin: pinInput });
-    if (res?.ok) { flash(res.message); setPinInput(""); setPinMode(null); fetchState(); }
+    const pin = pinInput;
+
+    // Optimistic update — instantly show as confirmed
+    const prevState = state;
+    const me = state.players.find((p) => p.id === selectedId);
+    const currentInCount = state.players.filter((p) => p.section === "playing").length;
+    const newSection = currentInCount < SLOTS ? "playing" : "standby";
+    setState({
+      ...state,
+      players: state.players.map((p) =>
+        p.id === selectedId ? { ...p, status: "in", section: newSection } : p
+      ),
+      spotsUsed: newSection === "playing" ? state.spotsUsed + 1 : state.spotsUsed,
+      spotsLeft: newSection === "playing" ? state.spotsLeft - 1 : state.spotsLeft,
+    });
+    flash(`${me?.emoji} ${me?.name} is IN!`);
+    setPinInput("");
+    setPinMode(null);
+
+    // Fire API call in background
+    const res = await api("/api/confirm", { playerId: selectedId, pin });
+    if (!res?.ok) {
+      setState(prevState);
+    } else {
+      fetchState();
+    }
   };
 
   const handleDropout = async () => {
     if (!/^\d{4}$/.test(pinInput)) { flash("Enter your 4-digit PIN", "error"); return; }
-    const res = await api("/api/dropout", { playerId: selectedId, pin: pinInput });
-    if (res?.ok) { flash(res.message); setPinInput(""); setPinMode(null); fetchState(); }
+    const pin = pinInput;
+
+    // Optimistic update — instantly show as dropped
+    const prevState = state;
+    const me = state.players.find((p) => p.id === selectedId);
+    const wasPlaying = me?.section === "playing";
+    const updatedPlayers = state.players.map((p) =>
+      p.id === selectedId ? { ...p, status: "out", section: "dropped" } : p
+    );
+
+    // Auto-promote first standby if a playing spot opened
+    if (wasPlaying) {
+      const firstStandby = updatedPlayers.find((p) => p.section === "standby");
+      if (firstStandby) {
+        firstStandby.section = "playing";
+      }
+    }
+
+    setState({
+      ...state,
+      players: updatedPlayers,
+      spotsUsed: wasPlaying ? state.spotsUsed - 1 : state.spotsUsed,
+      spotsLeft: wasPlaying ? state.spotsLeft + 1 : state.spotsLeft,
+    });
+    flash(`${me?.name} dropped out`);
+    setPinInput("");
+    setPinMode(null);
+
+    // Fire API call in background
+    const res = await api("/api/dropout", { playerId: selectedId, pin });
+    if (!res?.ok) {
+      setState(prevState);
+    } else {
+      fetchState();
+    }
   };
 
   const handleNewWeek = async () => {
