@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { getSupabase, isWindowOpen } from "@/lib/supabase";
 
 export async function POST(req) {
   const { playerId, pin } = await req.json();
@@ -8,9 +8,16 @@ export async function POST(req) {
     return NextResponse.json({ error: "Need player ID and PIN" }, { status: 400 });
   }
 
+  // Check time window
+  if (!isWindowOpen()) {
+    return NextResponse.json(
+      { error: "Changes are only allowed Friday 12:00 to Monday 15:00" },
+      { status: 400 }
+    );
+  }
+
   const sb = getSupabase();
 
-  // Verify PIN
   const { data: player } = await sb
     .from("players")
     .select("id, pin, name, emoji")
@@ -21,7 +28,6 @@ export async function POST(req) {
     return NextResponse.json({ error: "Wrong PIN" }, { status: 403 });
   }
 
-  // Get current week
   const { data: week } = await sb
     .from("weeks")
     .select("id")
@@ -29,23 +35,12 @@ export async function POST(req) {
     .limit(1)
     .single();
 
-  if (!week) {
-    return NextResponse.json({ error: "No active week" }, { status: 400 });
-  }
+  if (!week) return NextResponse.json({ error: "No active week" }, { status: 400 });
 
-  // Upsert as out
   await sb.from("confirmations").upsert(
-    {
-      week_id: week.id,
-      player_id: playerId,
-      status: "out",
-      confirmed_at: new Date().toISOString(),
-    },
+    { week_id: week.id, player_id: playerId, status: "out", confirmed_at: new Date().toISOString() },
     { onConflict: "week_id,player_id" }
   );
 
-  return NextResponse.json({
-    ok: true,
-    message: `${player.name} dropped out`,
-  });
+  return NextResponse.json({ ok: true, message: `${player.name} marked OUT` });
 }

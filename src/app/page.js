@@ -119,6 +119,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [auditLog, setAuditLog] = useState(null);
   const [showAudit, setShowAudit] = useState(false);
+  const [windowInfo, setWindowInfo] = useState({ open: true, message: "" });
 
   const flash = useCallback((msg, type = "success") => {
     setToast({ msg, type });
@@ -186,6 +187,13 @@ export default function Home() {
       const data = await fetchState();
       if (!data?.week) { setScreen("pick-name"); return; }
       setState(data);
+
+      // Fetch window status
+      try {
+        const wRes = await fetch("/api/window");
+        const wData = await wRes.json();
+        setWindowInfo(wData);
+      } catch {}
 
       const savedId = localStorage.getItem("fives_player_id");
       const savedLoggedIn = localStorage.getItem("fives_logged_in");
@@ -556,42 +564,57 @@ export default function Home() {
             {/* Action card */}
             {me && (
               <div className="bg-gradient-to-br from-[#14291e] to-[#1a3328] border border-green-500/20 rounded-2xl p-4 mb-4">
-                {me.section === "waiting" && (
-                  <div>
-                    <div className="text-center text-slate-400 text-sm mb-3">Are you playing this week?</div>
-                    <div className="flex gap-3">
-                      <button onClick={handleConfirm}
-                        className="flex-1 bg-green-500 text-green-950 py-4 rounded-xl font-extrabold text-base tracking-wide active:scale-[0.98] transition">
-                        I'M IN ⚽
-                      </button>
-                      <button onClick={handleDropout}
-                        className="flex-1 bg-red-500 text-white py-4 rounded-xl font-extrabold text-base tracking-wide active:scale-[0.98] transition">
-                        I'M OUT
-                      </button>
-                    </div>
+                {!windowInfo.open ? (
+                  <div className="text-center py-2">
+                    <div className="text-amber-400 font-bold text-sm mb-1">🔒 Confirmations Closed</div>
+                    <div className="text-slate-400 text-xs">{windowInfo.message}</div>
+                    {me.section !== "waiting" && (
+                      <div className="mt-2 text-sm">
+                        Your status: <StatusBadge section={me.section} />
+                      </div>
+                    )}
                   </div>
-                )}
-                {(me.section === "playing" || me.section === "standby") && (
-                  <div>
-                    <div className="text-center text-green-400 text-sm font-bold mb-3">
-                      You're {me.section === "playing" ? "PLAYING" : "on STANDBY"} ✓
-                    </div>
-                    <button onClick={handleDropout}
-                      className="w-full bg-red-500/20 text-red-400 border border-red-500/30 py-3 rounded-xl font-extrabold text-sm tracking-wide active:scale-[0.98] transition">
-                      Change to OUT
-                    </button>
-                  </div>
-                )}
-                {me.section === "dropped" && (
-                  <div>
-                    <div className="text-center text-red-400 text-sm font-bold mb-3">
-                      You're marked OUT this week
-                    </div>
-                    <button onClick={handleConfirm}
-                      className="w-full bg-green-500/20 text-green-400 border border-green-500/30 py-3 rounded-xl font-extrabold text-sm tracking-wide active:scale-[0.98] transition">
-                      Change to IN
-                    </button>
-                  </div>
+                ) : (
+                  <>
+                    <div className="text-center text-[10px] font-mono text-green-600 mb-2">🟢 OPEN · {windowInfo.message}</div>
+                    {me.section === "waiting" && (
+                      <div>
+                        <div className="text-center text-slate-400 text-sm mb-3">Are you playing this week?</div>
+                        <div className="flex gap-3">
+                          <button onClick={handleConfirm}
+                            className="flex-1 bg-green-500 text-green-950 py-4 rounded-xl font-extrabold text-base tracking-wide active:scale-[0.98] transition">
+                            I'M IN ⚽
+                          </button>
+                          <button onClick={handleDropout}
+                            className="flex-1 bg-red-500 text-white py-4 rounded-xl font-extrabold text-base tracking-wide active:scale-[0.98] transition">
+                            I'M OUT
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {(me.section === "playing" || me.section === "standby") && (
+                      <div>
+                        <div className="text-center text-green-400 text-sm font-bold mb-3">
+                          You're {me.section === "playing" ? "PLAYING" : "on STANDBY"} ✓
+                        </div>
+                        <button onClick={handleDropout}
+                          className="w-full bg-red-500/20 text-red-400 border border-red-500/30 py-3 rounded-xl font-extrabold text-sm tracking-wide active:scale-[0.98] transition">
+                          Change to OUT
+                        </button>
+                      </div>
+                    )}
+                    {me.section === "dropped" && (
+                      <div>
+                        <div className="text-center text-red-400 text-sm font-bold mb-3">
+                          You're marked OUT this week
+                        </div>
+                        <button onClick={handleConfirm}
+                          className="w-full bg-green-500/20 text-green-400 border border-green-500/30 py-3 rounded-xl font-extrabold text-sm tracking-wide active:scale-[0.98] transition">
+                          Change to IN
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
