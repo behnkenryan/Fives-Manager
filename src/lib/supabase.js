@@ -1,6 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Server-side client with service role key (full access)
 export function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -9,3 +8,8 @@ export function getSupabase() {
 }
 
 export const SLOTS = 10;
+
+export async function logAudit(action, details) {
+  const sb = getSupabase();
+  await sb.from("audit_log").insert({ action, details });
+}

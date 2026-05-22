@@ -43,7 +43,7 @@ function ReliabilityBar({ pct }) {
   );
 }
 
-function PlayerSection({ title, color, players, showAdmin, onReorder }) {
+function PlayerSection({ title, color, players, showAdmin, onReorder, onOverride }) {
   const colors = {
     green: { dot: "bg-green-500 shadow-green-500/40", text: "text-green-500" },
     amber: { dot: "bg-amber-400 shadow-amber-400/40", text: "text-amber-400" },
@@ -60,19 +60,37 @@ function PlayerSection({ title, color, players, showAdmin, onReorder }) {
       </div>
       <div className="space-y-1">
         {players.map((p) => (
-          <div key={p.id} className="flex items-center bg-[#111a15] border border-slate-800 rounded-xl px-3.5 py-2.5 transition-all">
+          <div key={p.id} className="bg-[#111a15] border border-slate-800 rounded-xl px-3.5 py-2.5 transition-all">
+            <div className="flex items-center">
+              {showAdmin && (
+                <div className="flex flex-col mr-2 gap-0.5">
+                  <button onClick={() => onReorder(p.id, "up")}
+                    className="text-slate-500 hover:text-green-500 text-xs leading-none px-1 py-0.5 rounded hover:bg-slate-800 transition">▲</button>
+                  <button onClick={() => onReorder(p.id, "down")}
+                    className="text-slate-500 hover:text-green-500 text-xs leading-none px-1 py-0.5 rounded hover:bg-slate-800 transition">▼</button>
+                </div>
+              )}
+              <span className="font-mono text-xs font-extrabold text-slate-600 w-7">#{p.rank}</span>
+              <span className="text-lg mr-2.5">{p.emoji}</span>
+              <span className="text-sm font-bold flex-1">{p.name}</span>
+              <StatusBadge section={p.section} />
+            </div>
             {showAdmin && (
-              <div className="flex flex-col mr-2 gap-0.5">
-                <button onClick={() => onReorder(p.id, "up")}
-                  className="text-slate-500 hover:text-green-500 text-xs leading-none px-1 py-0.5 rounded hover:bg-slate-800 transition">▲</button>
-                <button onClick={() => onReorder(p.id, "down")}
-                  className="text-slate-500 hover:text-green-500 text-xs leading-none px-1 py-0.5 rounded hover:bg-slate-800 transition">▼</button>
+              <div className="flex gap-1.5 mt-2 ml-7">
+                {p.section !== "playing" && (
+                  <button onClick={() => onOverride(p.id, p.name, "in")}
+                    className="bg-green-500/20 text-green-400 px-2 py-0.5 rounded text-[10px] font-bold hover:bg-green-500/30">Force IN</button>
+                )}
+                {p.section !== "dropped" && p.section !== "waiting" && (
+                  <button onClick={() => onOverride(p.id, p.name, "out")}
+                    className="bg-red-500/20 text-red-400 px-2 py-0.5 rounded text-[10px] font-bold hover:bg-red-500/30">Force OUT</button>
+                )}
+                {(p.section === "playing" || p.section === "standby" || p.section === "dropped") && (
+                  <button onClick={() => onOverride(p.id, p.name, "clear")}
+                    className="bg-slate-700/50 text-slate-400 px-2 py-0.5 rounded text-[10px] font-bold hover:bg-slate-700">Clear</button>
+                )}
               </div>
             )}
-            <span className="font-mono text-xs font-extrabold text-slate-600 w-7">#{p.rank}</span>
-            <span className="text-lg mr-2.5">{p.emoji}</span>
-            <span className="text-sm font-bold flex-1">{p.name}</span>
-            <StatusBadge section={p.section} />
           </div>
         ))}
       </div>
@@ -99,6 +117,8 @@ export default function Home() {
   const [adminPin, setAdminPin] = useState("");
   const [newPlayerName, setNewPlayerName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [auditLog, setAuditLog] = useState(null);
+  const [showAudit, setShowAudit] = useState(false);
 
   const flash = useCallback((msg, type = "success") => {
     setToast({ msg, type });
@@ -124,6 +144,16 @@ export default function Home() {
       setStats(data.stats);
     } catch {
       flash("Failed to load stats", "error");
+    }
+  }, [flash]);
+
+  const fetchAudit = useCallback(async () => {
+    try {
+      const res = await fetch("/api/audit");
+      const data = await res.json();
+      setAuditLog(data.logs);
+    } catch {
+      flash("Failed to load audit log", "error");
     }
   }, [flash]);
 
@@ -324,6 +354,14 @@ export default function Home() {
     if (!/^\d{4}$/.test(adminPin)) { flash("Enter admin PIN first", "error"); return; }
     if (!confirm(`Reset PIN for ${name}?`)) return;
     const res = await api("/api/admin/reset-pin", { adminPin, playerId });
+    if (res?.ok) { flash(res.message); const d = await fetchState(); if (d) setState(d); }
+  };
+
+  const handleOverride = async (playerId, name, status) => {
+    if (!/^\d{4}$/.test(adminPin)) { flash("Enter admin PIN first", "error"); return; }
+    const label = status === "in" ? "IN" : status === "out" ? "OUT" : "CLEARED";
+    if (!confirm(`Override ${name} to ${label}?`)) return;
+    const res = await api("/api/admin/override", { adminPin, playerId, status });
     if (res?.ok) { flash(res.message); const d = await fetchState(); if (d) setState(d); }
   };
 
@@ -538,10 +576,10 @@ export default function Home() {
             )}
 
             {/* Player lists */}
-            {playing.length > 0 && <PlayerSection title="PLAYING" color="green" players={playing} showAdmin={showAdmin} onReorder={handleReorder} />}
-            {standby.length > 0 && <PlayerSection title="STANDBY" color="amber" players={standby} showAdmin={showAdmin} onReorder={handleReorder} />}
-            {waiting.length > 0 && <PlayerSection title="NOT CONFIRMED" color="slate" players={waiting} showAdmin={showAdmin} onReorder={handleReorder} />}
-            {dropped.length > 0 && <PlayerSection title="DROPPED" color="red" players={dropped} showAdmin={showAdmin} onReorder={handleReorder} />}
+            {playing.length > 0 && <PlayerSection title="PLAYING" color="green" players={playing} showAdmin={showAdmin} onReorder={handleReorder} onOverride={handleOverride} />}
+            {standby.length > 0 && <PlayerSection title="STANDBY" color="amber" players={standby} showAdmin={showAdmin} onReorder={handleReorder} onOverride={handleOverride} />}
+            {waiting.length > 0 && <PlayerSection title="NOT CONFIRMED" color="slate" players={waiting} showAdmin={showAdmin} onReorder={handleReorder} onOverride={handleOverride} />}
+            {dropped.length > 0 && <PlayerSection title="DROPPED" color="red" players={dropped} showAdmin={showAdmin} onReorder={handleReorder} onOverride={handleOverride} />}
 
             {/* How it works */}
             <div className="bg-[#111a15] border border-slate-800 rounded-2xl p-4 mt-5 text-sm text-slate-400 leading-relaxed">
@@ -617,6 +655,36 @@ export default function Home() {
                     className="w-full text-slate-500 text-xs py-2 underline mt-4">
                     Log out of this device
                   </button>
+
+                  {/* Audit Log */}
+                  <div className="border-t border-slate-800 pt-4 mt-4">
+                    <button onClick={() => { setShowAudit(!showAudit); if (!showAudit) fetchAudit(); }}
+                      className="w-full bg-slate-800/50 text-slate-400 py-2 rounded-lg text-xs font-bold">
+                      {showAudit ? "Hide Audit Log" : "📋 View Audit Log"}
+                    </button>
+                    {showAudit && (
+                      <div className="mt-2 space-y-1 max-h-64 overflow-y-auto">
+                        {!auditLog ? (
+                          <div className="text-center text-slate-600 py-3 text-xs">Loading...</div>
+                        ) : auditLog.length === 0 ? (
+                          <div className="text-center text-slate-600 py-3 text-xs">No admin actions yet</div>
+                        ) : (
+                          auditLog.map((log) => (
+                            <div key={log.id} className="bg-slate-800/30 rounded-lg px-3 py-2">
+                              <div className="flex justify-between items-start gap-2">
+                                <span className="text-xs text-slate-300">{log.details}</span>
+                                <span className="text-[10px] text-slate-600 font-mono whitespace-nowrap">
+                                  {new Date(log.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short" })}{" "}
+                                  {new Date(log.created_at).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-600 font-mono mt-0.5">{log.action}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
