@@ -39,7 +39,34 @@ export async function POST(req) {
     confMap[c.player_id] = c.status;
   });
 
-  // Reorder: confirmed players keep priority, dropouts go to bottom
+  // Determine who was playing (first SLOTS "in" players by rank)
+  const inPlayers = players
+    .filter((p) => confMap[p.id] === "in")
+    .sort((a, b) => a.rank - b.rank);
+
+  const playingIds = new Set(inPlayers.slice(0, SLOTS).map((p) => p.id));
+
+  // Record history for all players
+  const historyRecords = players.map((p) => {
+    let result;
+    if (playingIds.has(p.id)) {
+      result = "played";
+    } else if (confMap[p.id] === "out") {
+      result = "dropped";
+    } else {
+      result = "absent";
+    }
+    return {
+      week_id: currentWeek.id,
+      player_id: p.id,
+      result,
+    };
+  });
+
+  // Insert history (ignore conflicts if already recorded)
+  await sb.from("history").upsert(historyRecords, { onConflict: "week_id,player_id" });
+
+  // Reorder: confirmed players keep priority, then waiting, dropouts go to bottom
   const confirmed = players.filter((p) => confMap[p.id] === "in");
   const waiting = players.filter((p) => !confMap[p.id] || confMap[p.id] === "waiting");
   const dropped = players.filter((p) => confMap[p.id] === "out");
@@ -64,7 +91,7 @@ export async function POST(req) {
 
   return NextResponse.json({
     ok: true,
-    message: `Week ${newNum} started. Ranks updated.`,
+    message: `Week ${newNum} started. History recorded. Ranks updated.`,
     newWeek: newNum,
   });
 }
