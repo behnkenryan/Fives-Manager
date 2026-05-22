@@ -14,33 +14,32 @@ export async function logAudit(action, details) {
   await sb.from("audit_log").insert({ action, details });
 }
 
+// Get current time in SAST (UTC+2) reliably
+function getSAST() {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const sast = new Date(utcMs + 2 * 3600000); // UTC+2
+  return sast;
+}
+
 // Check if the confirmation window is open
 // Window: Friday 12:00 SAST to Monday 15:00 SAST
 export function isWindowOpen() {
-  // Get current time in South Africa (SAST = UTC+2)
-  const now = new Date();
-  const sast = new Date(now.toLocaleString("en-US", { timeZone: "Africa/Johannesburg" }));
-  const day = sast.getDay(); // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+  const sast = getSAST();
+  const day = sast.getDay(); // 0=Sun, 1=Mon, 5=Fri, 6=Sat
   const hour = sast.getHours();
 
-  // Friday 12:00+ → open
   if (day === 5 && hour >= 12) return true;
-  // Saturday all day → open
   if (day === 6) return true;
-  // Sunday all day → open
   if (day === 0) return true;
-  // Monday before 15:00 → open
   if (day === 1 && hour < 15) return true;
 
   return false;
 }
 
-// Get window status info for the frontend
 export function getWindowInfo() {
   const open = isWindowOpen();
-
-  const now = new Date();
-  const sast = new Date(now.toLocaleString("en-US", { timeZone: "Africa/Johannesburg" }));
+  const sast = getSAST();
   const day = sast.getDay();
   const hour = sast.getHours();
 
